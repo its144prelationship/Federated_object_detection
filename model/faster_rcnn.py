@@ -2,7 +2,6 @@ from __future__ import  absolute_import
 from __future__ import division
 import torch as t
 import numpy as np
-import cupy as cp
 from utils import array_tool as at
 from model.utils.bbox_tools import loc2bbox
 from model.utils.nms import non_maximum_suppression
@@ -172,8 +171,8 @@ class FasterRCNN(nn.Module):
             cls_bbox_l = cls_bbox_l[mask]
             prob_l = prob_l[mask]
             keep = non_maximum_suppression(
-                cp.array(cls_bbox_l), self.nms_thresh, prob_l)
-            keep = cp.asnumpy(keep)
+                np.array(cls_bbox_l), self.nms_thresh, prob_l)
+            keep = np.asarray(keep) 
             bbox.append(cls_bbox_l[keep])
             # The labels are in [0, self.n_class - 2].
             label.append((l - 1) * np.ones((len(keep),)))

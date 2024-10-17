@@ -380,7 +380,7 @@ class FLServer(object):
         self.logger.info("sent aggregated model to client")
 
     def start(self):
-        self.socketio.run(self.app, host=self.host, port=self.port)
+        self.socketio.run(self.app, host=self.host, port=self.port, allow_unsafe_werkzeug=True)
 
 
 if __name__ == '__main__':

@@ -3,7 +3,7 @@ import random
 import time
 import json
 from model.model_wrapper import Models
-from socketIO_client import SocketIO
+import socketio
 from utils.model_dump import *
 
 import os
@@ -89,7 +89,8 @@ class FederatedClient(object):
         self.logger.addHandler(self.fh)
         self.logger.addHandler(self.ch)
         self.logger.info(self.task_config)
-        self.sio = SocketIO(server_host, server_port, None, {'timeout': 36000})
+        self.sio = socketio.Client()
+        self.sio.connect(f'http://{server_host}:{server_port}', wait_timeout=36000)
         self.register_handles()
         print("sent wakeup")
         self.sio.emit('client_wake_up')

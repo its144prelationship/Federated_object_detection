@@ -4,11 +4,11 @@ matplotlib
 terminaltables
 pillow
 tqdm
-sklearn
-socketIO_client
+scikit-learn
+socketio
 flask
 flask_socketio
 scikit_image
 torchnet
 scipy
-cupy
+numpy

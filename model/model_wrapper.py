@@ -19,7 +19,7 @@ from utils.eval_tool import eval_detection_voc
 
 sys.path.append("")
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
-torch.set_num_threads(4)
+torch.set_num_threads(1)
 torch.manual_seed(1234)
 torch.cuda.manual_seed(1234)
 torch.backends.cudnn.deterministic = True
@@ -76,7 +76,8 @@ class Yolo(object):
 
     def set_weights(self, parameters):
         for i, param in enumerate(self.yolo.parameters()):
-            param_ = torch.from_numpy(parameters[i]).cuda()
+            device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+            param_ = torch.from_numpy(parameters[i]).to(device)
             param.data.copy_(param_)
 
     def train_one_epoch(self):
@@ -195,7 +196,8 @@ class FasterRCNN(object):
 
     def set_weights(self, parameters):
         for i, param in enumerate(self.faster_rcnn.parameters()):
-            param_ = torch.from_numpy(parameters[i]).cuda()
+            device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+            param_ = torch.from_numpy(parameters[i]).to(device)
             param.data.copy_(param_)
 
     def train_one_epoch(self):

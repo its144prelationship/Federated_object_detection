@@ -14,18 +14,20 @@ import torchvision.transforms as transforms
 
 def pad_to_square(img, pad_value):
     c, h, w = img.shape
-    dim_diff = np.abs(h - w)
-    # (upper / left) padding and (lower / right) padding
-    pad1, pad2 = dim_diff // 2, dim_diff - dim_diff // 2
-    # Determine padding
-    pad = (0, 0, pad1, pad2) if h <= w else (pad1, pad2, 0, 0)
-    ###### modification line added ######
-    pad = torch.from_numpy(np.array(pad))
-    ###############################
-    # Add padding
-    img = F.pad(img, pad, "constant", value=pad_value)
+    dim_diff = abs(h - w)
+    
+    # Calculate padding
+    pad1, pad2 = dim_diff // 2, dim_diff - (dim_diff // 2)
+    
+    # pad1 and pad2 will be used to create the tuple of integers
+    if h <= w:
+        pad = (0, 0, pad1, pad2)  # Padding for height
+    else:
+        pad = (pad1, pad2, 0, 0)  # Padding for width
 
-    pad = pad.double()
+    # Apply padding using the tuple of integers
+    img = F.pad(img, pad, "constant", value=pad_value)
+    
     return img, pad
 
 

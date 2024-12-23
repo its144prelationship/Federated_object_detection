@@ -1,4 +1,5 @@
 numpy
+torch
 torchvision
 matplotlib
 terminaltables
@@ -11,4 +12,3 @@ flask_socketio
 scikit_image
 torchnet
 scipy
-numpy

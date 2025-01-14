@@ -1,5 +1,5 @@
 import numpy as np
-import cupy as cp
+import torch as t
 
 from model.utils.bbox_tools import bbox2loc, bbox_iou, loc2bbox
 from model.utils.nms import non_maximum_suppression
@@ -421,9 +421,11 @@ class ProposalCreator:
 
         # unNOTE: somthing is wrong here!
         # TODO: remove cuda.to_gpu
+        roi_tensor = t.as_tensor(roi, device='cuda')
         keep = non_maximum_suppression(
-            cp.ascontiguousarray(cp.asarray(roi)),
-            thresh=self.nms_thresh)
+            roi_tensor.contiguous(),
+            thresh=self.nms_thresh
+        )
         if n_post_nms > 0:
             keep = keep[:n_post_nms]
         roi = roi[keep]

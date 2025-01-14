@@ -1,6 +1,5 @@
 from __future__ import division
 import numpy as np
-import cupy as cp
 import torch as t
 try:
     from ._nms_gpu_post import _nms_gpu_post
@@ -13,12 +12,15 @@ except:
     from ._nms_gpu_post_py import _nms_gpu_post
 
 
-@cp.util.memoize(for_each_device=True)
+@t.jit.script
 def _load_kernel(kernel_name, code, options=()):
-    cp.cuda.runtime.free(0)
-    assert isinstance(options, tuple)
-    kernel_code = cp.cuda.compile_with_cache(code, options=options)
-    return kernel_code.get_function(kernel_name)
+    if not t.cuda.is_available():
+        raise RuntimeError("CUDA is not available.")
+    kernel_code = t.cuda.CUDAStream()
+    def kernel_fn(*args):
+        pass
+
+    return kernel_fn
 
 
 def non_maximum_suppression(bbox, thresh, score=None,
@@ -72,14 +74,14 @@ def non_maximum_suppression(bbox, thresh, score=None,
 
 def _non_maximum_suppression_gpu(bbox, thresh, score=None, limit=None):
     if len(bbox) == 0:
-        return cp.zeros((0,), dtype=np.int32)
+        return t.zeros((0,), dtype=t.int32).cpu().numpy()
 
     n_bbox = bbox.shape[0]
 
     if score is not None:
-        order = score.argsort()[::-1].astype(np.int32)
+        order = t.argsort(score, descending=True).to(t.int32)
     else:
-        order = cp.arange(n_bbox, dtype=np.int32)
+        order = t.arange(n_bbox, dtype=t.int32, device='cuda')
 
     sorted_bbox = bbox[order, :]
     selec, n_selec = _call_nms_kernel(
@@ -88,7 +90,7 @@ def _non_maximum_suppression_gpu(bbox, thresh, score=None, limit=None):
     selec = order[selec]
     if limit is not None:
         selec = selec[:limit]
-    return cp.asnumpy(selec)
+    return selec.cpu().numpy()
 
 
 _nms_gpu_code = '''
@@ -157,22 +159,67 @@ void nms_kernel(const int n_bbox, const float thresh,
 
 
 def _call_nms_kernel(bbox, thresh):
-    # PyTorch does not support unsigned long Tensor.
-    # Doesn't matter,since it returns ndarray finally.
-    # So I'll keep it unmodified.
+    if not isinstance(bbox, t.Tensor):
+        bbox = t.tensor(bbox, dtype=t.float32, device='cuda')
+    if not bbox.is_cuda:
+        bbox = bbox.cuda()
+
     n_bbox = bbox.shape[0]
     threads_per_block = 64
-    col_blocks = np.ceil(n_bbox / threads_per_block).astype(np.int32)
-    blocks = (col_blocks, col_blocks, 1)
-    threads = (threads_per_block, 1, 1)
+    col_blocks = int(np.ceil(n_bbox / threads_per_block))
+    mask_dev = t.zeros((n_bbox * col_blocks,), dtype=t.uint64, device='cuda')
+    
+    def nms_kernel(n_bbox, thresh, bbox, mask_dev):
+        for i in range(n_bbox):
+            if mask_dev[i] != 0:
+                continue
 
-    mask_dev = cp.zeros((n_bbox * col_blocks,), dtype=np.uint64)
-    bbox = cp.ascontiguousarray(bbox, dtype=np.float32)
-    kern = _load_kernel('nms_kernel', _nms_gpu_code)
-    kern(blocks, threads, args=(cp.int32(n_bbox), cp.float32(thresh),
-                                bbox, mask_dev))
+            box_i = bbox[i]
 
-    mask_host = mask_dev.get()
-    selection, n_selec = _nms_gpu_post(
-        mask_host, n_bbox, threads_per_block, col_blocks)
+            for j in range(i + 1, n_bbox):
+                if mask_dev[j] != 0:
+                    continue 
+
+                box_j = bbox[j]
+                iou = compute_iou(box_i, box_j)
+                
+                if iou > thresh:
+                    mask_dev[j] = 1
+    
+    nms_kernel(n_bbox, thresh, bbox, mask_dev)
+    
+    mask_host = mask_dev.cpu().numpy()
+
+    selection, n_selec = _nms_gpu_post(mask_host, n_bbox, threads_per_block, col_blocks)
     return selection, n_selec
+
+def compute_iou(box1, box2):
+    """
+    Computes the Intersection over Union (IoU) of two bounding boxes.
+    
+    Args:
+        box1 (t.Tensor): The first bounding box, shape (4,).
+        box2 (t.Tensor): The second bounding box, shape (4,).
+        
+    Returns:
+        float: The IoU between the two boxes.
+    """
+    # Calculate the coordinates of the intersection rectangle
+    x1 = max(box1[0], box2[0])  # max(x1_1, x1_2)
+    y1 = max(box1[1], box2[1])  # max(y1_1, y1_2)
+    x2 = min(box1[2], box2[2])  # min(x2_1, x2_2)
+    y2 = min(box1[3], box2[3])  # min(y2_1, y2_2)
+
+    # Calculate the area of the intersection
+    inter_area = max(0, x2 - x1) * max(0, y2 - y1)
+
+    # Calculate the area of both boxes
+    box1_area = (box1[2] - box1[0]) * (box1[3] - box1[1])
+    box2_area = (box2[2] - box2[0]) * (box2[3] - box2[1])
+
+    # Calculate the area of the union
+    union_area = box1_area + box2_area - inter_area
+
+    # Compute IoU
+    iou = inter_area / union_area if union_area > 0 else 0
+    return iou

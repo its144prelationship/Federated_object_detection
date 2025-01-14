@@ -12,4 +12,3 @@ flask_socketio
 scikit_image
 torchnet
 scipy
-cupy
